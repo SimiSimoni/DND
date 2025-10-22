@@ -10,7 +10,7 @@ def create_csv(path="SaveFileDnD.csv"):
     if os.path.exists(path):
         return
     data = [
-        ["Name", "HP", "Dmg", "ENG", "WEPON"],
+        ["Name", "HP", "Dmg", "ENG", "WEAPON"],
         ["Simone", 20, 4, 10, "Sword"],
         ["TheSerpentofPride", 20, 1, 10, "Fangs"],
         ["TheDevourerofGluttony", 20, 2, 10, "Bite"],
@@ -212,7 +212,7 @@ def main():
                 time.sleep(1)
                 enemigos = [nuevo]
 
-        time.sleep(0.5)
+        time.sleep(1)
 
     limpiar_pantalla()
     print("¡Ganaste!" if jugador.sigue_vivo() else "Has muerto...")
