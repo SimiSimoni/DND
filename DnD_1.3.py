@@ -6,21 +6,27 @@ import shutil
 
 # make csv
 def create_csv(path="SaveFileDnD.csv"):
+    recrear = True
     if os.path.exists(path):
-        return
-    data = [
-        ["Name", "HP", "Dmg", "ENG", "WEAPON"],
-        ["Jugador", 20, 4, 10, "Sword"],
-        ["TheSerpentofPride", 20, 1, 10, "Fangs"],
-        ["TheDevourerofGluttony", 20, 2, 10, "Bite"],
-        ["TheBeastofLust", 20, 3, 10, "Slam"],
-        ["TheColossusofGreed", 20, 4, 10, "Grab"],
-        ["TheDemonofEnvy", 20, 5, 10, "Pitchfork"],
-        ["TheWarriorofWrath", 20, 6, 10, "Sword"],
-        ["TheSpectreofSloth", 20, 7, 10, "Freeze"]
-    ]
-    with open(path, "w", newline="") as f:
-        csv.writer(f).writerows(data)
+        with open(path, newline='') as f:
+            reader = csv.reader(f)
+            header = next(reader, [])
+            if header == ["Name", "HP", "Dmg", "ENG", "WEAPON"]:
+                recrear = False
+    if recrear:
+        data = [
+            ["Name", "HP", "Dmg", "ENG", "WEAPON"],
+            ["Jugador", 20, 4, 10, "Espada "],
+            ["Araña", 20, 1, 10, "Mordida"],
+            ["Bruja", 20, 2, 10, "Magia"],
+            ["Duende", 20, 3, 10, "Lanza"],
+            ["Ogro", 20, 4, 10, "Martillo"],
+            ["Gigante", 20, 5, 10, "Pisada"],
+            ["Elfo", 20, 6, 10, "Magia"],
+            ["Dragon", 20, 7, 10, "Aliento de Fuego"]
+        ]
+        with open(path, "w", newline="") as f:
+            csv.writer(f).writerows(data)
 
 
 # clear screen
@@ -85,6 +91,9 @@ def usar_objeto(jugador, obj):
     elif obj.efecto == "energia":
         jugador.energia += obj.valor
     print(f"{jugador.nombre} usó {obj.nombre}! ({obj.efecto}+{obj.valor})")
+    # marcar el objeto como recogido (fuera del tablero)
+    obj.x = -1
+    obj.y = -1
 
 # clase de entidad
 class Entidad:
@@ -107,6 +116,9 @@ class Objeto:
         self.efecto = efecto
         self.valor = valor
         self.simbolo = simbolo
+        # posición -1 indica "no en el tablero"
+        self.x = -1
+        self.y = -1
 
 # juego principal
 def main():
@@ -128,36 +140,36 @@ def main():
     
 
    
-    Names, Hps, Dmg, Energies, weapons = [], [], [], [], []
+    Nombres, Hps, Dmg, Energias, Armas = [], [], [], [], []
     with open('SaveFileDnDRunning.csv', 'r', newline='') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            Names.append(row["Name"])
+            Nombres.append(row["Name"])
             Hps.append(int(row["HP"]))
             Dmg.append(int(row["Dmg"]))
-            Energies.append(int(row["ENG"]))
-            weapons.append(row["WEAPON"])
+            Energias.append(int(row["ENG"]))
+            Armas.append(row["WEAPON"])
 
-    if not Names:
+    if not Nombres:
         raise ValueError("CSV vacío")
 
     tamano = 8
 
     # Player
-    Name = input("Ingresa tu nombre: ")
-    jugador = Entidad(Name, Hps[0], Dmg[0], Energies[0], weapons[0], 0, 0, Name[0].upper())
+    nombre = input("Ingresa tu nombre: ")
+    jugador = Entidad(nombre, Hps[0], Dmg[0], Energias[0], Armas[0], 0, 0, nombre[0].upper())
     with open('SaveFileDnDRunning.csv', 'r') as f:
         lines = f.readlines()
-    lines[1] = f"{Name},{jugador.hp},{jugador.dmg},{jugador.energia},{jugador.tipo_ataque}\n"
+    lines[1] = f"{nombre},{jugador.hp},{jugador.dmg},{jugador.energia},{jugador.tipo_ataque}\n"
     with open('SaveFileDnDRunning.csv', 'w') as f:
         f.writelines(lines)
-    print(f"{Name[0]} representa al jugador,'E' a los enemigos y'O' son objetos que puedes recoger.")
+    print(f"{nombre[0]} representa al jugador,'E' a los enemigos y'O' son objetos que puedes recoger.")
     time.sleep(3)
     limpiar_pantalla()
     # Enemy queue
     cola = [
-        (Names[i], Hps[i], Dmg[i], Energies[i], weapons[i])
-        for i in range(1, len(Names))
+        (Nombres[i], Hps[i], Dmg[i], Energias[i], Armas[i])
+        for i in range(1, len(Nombres))
     ]
 
     # Spawn function
@@ -178,10 +190,37 @@ def main():
         Objeto("Elixir", "energia", 5)
     ]
 
+    # Respawn: coloca solo objetos que estén fuera del tablero y evita solapamientos
     def respawnObjetos():
+        ocupado = set()
+        # marcar posiciones ocupadas por jugador y enemigos
+        ocupado.add((jugador.x, jugador.y))
+        for e in enemigos:
+            if e and e.sigue_vivo():
+                ocupado.add((e.x, e.y))
+        # también añadir objetos ya colocados
+        for o in objetos:
+            if o.x >= 0 and o.y >= 0:
+                ocupado.add((o.x, o.y))
+
         for obj in objetos:
-            obj.x = random.randint(1, tamano - 1)
-            obj.y = random.randint(1, tamano - 1)
+            if obj.x < 0 or obj.y < 0:
+                # buscar posición libre
+                intentos = 0
+                while True:
+                    intentos += 1
+                    nx = random.randint(0, tamano - 1)
+                    ny = random.randint(0, tamano - 1)
+                    if (nx, ny) not in ocupado:
+                        obj.x = nx
+                        obj.y = ny
+                        ocupado.add((nx, ny))
+                        break
+                    if intentos > 200:
+                        # en caso extremo, dejar el objeto fuera (no hay espacio)
+                        obj.x = -1
+                        obj.y = -1
+                        break
 
     respawnObjetos()
 
@@ -195,10 +234,10 @@ def main():
 
         if accion in ["w", "a", "s", "d"]:
             mover(jugador, accion, tamano)
-            for obj in list(objetos):
+            for obj in objetos:
                 if obj.x == jugador.x and obj.y == jugador.y:
                     usar_objeto(jugador, obj)
-                    objetos.remove(obj)
+                    # no removemos el objeto de la lista: se marcó como fuera (-1,-1)
                     break
         elif accion == "f":
             vivos = [e for e in enemigos if e and e.sigue_vivo()]
@@ -235,6 +274,7 @@ def main():
                 print(f"¡Aparece {nuevo.nombre}!")
                 time.sleep(1)
                 enemigos = [nuevo]
+                # al aparecer nuevo enemigo, respawn de objetos faltantes
                 respawnObjetos()  
 
         time.sleep(1)
@@ -242,4 +282,5 @@ def main():
     limpiar_pantalla()
     print("¡Ganaste!" if jugador.sigue_vivo() else "Has muerto...")
 
-main()
+if __name__ == "__main__":
+    main()
