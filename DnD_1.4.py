@@ -97,11 +97,11 @@ def usar_objeto(jugador, obj):
 
 # clase de entidad
 class Entidad:
-    def __init__(self, nombre, hp, dmg, energia, tipo_ataque, x, y, simbolo):
+    def __init__(self, nombre, hp, dmg, energia, tipo_ataque, x=-1, y=-1, simbolo="?"):
         self.nombre = nombre
-        self.hp = hp
-        self.dmg = dmg
-        self.energia = energia
+        self.hp = int(hp)
+        self.dmg = int(dmg)
+        self.energia = int(energia)
         self.tipo_ataque = tipo_ataque
         self.x = x
         self.y = y
@@ -120,92 +120,90 @@ class Objeto:
         self.x = -1
         self.y = -1
 
-# juego principal
+def guardar_csv(path, entidades):
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Name", "HP", "Dmg", "ENG", "WEAPON"])
+        for e in entidades:
+            writer.writerow([e.nombre, int(e.hp), int(e.dmg), int(e.energia), e.tipo_ataque])
+
 def main():
-    # Historia del juego
     print("Erase una vez un reino lejano en el que había existido mucha tranquilidad...")
-    time.sleep(3)
+    time.sleep(1)
     print("Pero todo cambió cuando un libro prohibido de magia es abierto por accidedente")
     print("liberando criaturas y enigmas que amenzan el reino.")
-    time.sleep(3)
+    time.sleep(1)
     print("Tu misión es derrotar a los enemigos y sobrevivir en este mundo peligroso.")
     print("¡Prepárate para la batalla!")
-    time.sleep(3)
+    time.sleep(1)
     
-    # Menú inicial
     limpiar_pantalla()
  
     create_csv("SaveFileDnD.csv")
     shutil.copyfile('SaveFileDnD.csv', 'SaveFileDnDRunning.csv')
     
-
-   
-    Nombres, Hps, Dmg, Energias, Armas = [], [], [], [], []
+    entidades = []
     with open('SaveFileDnDRunning.csv', 'r', newline='') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            Nombres.append(row["Name"])
-            Hps.append(int(row["HP"]))
-            Dmg.append(int(row["Dmg"]))
-            Energias.append(int(row["ENG"]))
-            Armas.append(row["WEAPON"])
+            nombre = row["Name"]
+            hp = int(row["HP"])
+            dmg = int(row["Dmg"])
+            eng = int(row["ENG"])
+            weap = row["WEAPON"]
+            simbolo = nombre[0].upper() if nombre else "?"
+            entidades.append(Entidad(nombre, hp, dmg, eng, weap, x=-1, y=-1, simbolo=simbolo))
 
-    if not Nombres:
+    if not entidades:
         raise ValueError("CSV vacío")
 
     tamano = 8
 
-    # Player
     nombre = input("Ingresa tu nombre: ")
-    jugador = Entidad(nombre, Hps[0], Dmg[0], Energias[0], Armas[0], 0, 0, nombre[0].upper())
-    with open('SaveFileDnDRunning.csv', 'r') as f:
-        lines = f.readlines()
-    lines[1] = f"{nombre},{jugador.hp},{jugador.dmg},{jugador.energia},{jugador.tipo_ataque}\n"
-    with open('SaveFileDnDRunning.csv', 'w') as f:
-        f.writelines(lines)
+    jugador = entidades[0]
+    jugador.nombre = nombre
+    jugador.simbolo = nombre[0].upper()
+    jugador.x = 0
+    jugador.y = 0
+
+    guardar_csv('SaveFileDnDRunning.csv', entidades)
+
     print(f"{nombre[0]} representa al jugador,'E' a los enemigos y'O' son objetos que puedes recoger.")
-    time.sleep(3)
+    time.sleep(1)
     limpiar_pantalla()
-    # Enemy queue
-    cola = [
-        (Nombres[i], Hps[i], Dmg[i], Energias[i], Armas[i])
-        for i in range(1, len(Nombres))
-    ]
 
-    # Spawn function
+    enemigos_espera = entidades[1:]
+
     def spawn_next():
-        if not cola:
+        if not enemigos_espera:
             return None
-        n, h, d, e, w = cola.pop(0)
-        return Entidad(n, h, d, e, w, tamano - 1, tamano - 1, n[0].upper())
+        enemigo = enemigos_espera.pop(0)
+        enemigo.x = tamano - 1
+        enemigo.y = tamano - 1
+        enemigo.simbolo = enemigo.nombre[0].upper() if enemigo.nombre else "E"
+        return enemigo
 
-    # First enemy
     actual = spawn_next()
     enemigos = [actual] if actual else []
 
-    # Items
     objetos = [
         Objeto("Comida", "hp", 5),
         Objeto("Poción", "dmg", 2),
         Objeto("Elixir", "energia", 5)
     ]
 
-    # Respawn: coloca solo objetos que estén fuera del tablero y evita solapamientos
     def respawnObjetos():
         ocupado = set()
-        # marcar posiciones ocupadas por jugador y enemigos
         ocupado.add((jugador.x, jugador.y))
         for e in enemigos:
             if e and e.sigue_vivo():
                 ocupado.add((e.x, e.y))
-        # también añadir objetos ya colocados
         for o in objetos:
             if o.x >= 0 and o.y >= 0:
                 ocupado.add((o.x, o.y))
 
         for obj in objetos:
             if obj.x < 0 or obj.y < 0:
-                # buscar posición libre
                 intentos = 0
                 while True:
                     intentos += 1
@@ -225,7 +223,7 @@ def main():
     respawnObjetos()
 
     # Loop
-    while jugador.sigue_vivo() and (enemigos or cola):
+    while jugador.sigue_vivo() and (any(e and e.sigue_vivo() for e in enemigos) or enemigos_espera):
         limpiar_pantalla()
         dibujar_tablero(tamano, jugador, [e for e in enemigos if e], objetos)
         print(f"{jugador.nombre}: HP={jugador.hp} DMG={jugador.dmg} EN={jugador.energia}")
@@ -264,22 +262,58 @@ def main():
                     enemigo.y -= 1
             enemigo.energia = min(enemigo.energia + 1, 10)
 
-        
+        # Si el enemigo actual fue derrotado, limpiamos y hacemos spawn del siguiente
         if enemigos and not enemigos[0].sigue_vivo():
             print(f"{enemigos[0].nombre} derrotado!")
-            time.sleep(1)
+            time.sleep(0.5)
+            # Aseguramos que su hp esté en 0 o negativo
+            enemigos[0].hp = max(enemigos[0].hp, 0)
             enemigos = []
             nuevo = spawn_next()
             if nuevo:
                 print(f"¡Aparece {nuevo.nombre}!")
-                time.sleep(1)
+                time.sleep(0.5)
                 enemigos = [nuevo]
                 # al aparecer nuevo enemigo, respawn de objetos faltantes
-                respawnObjetos()  
+                respawnObjetos()
+        todas = [jugador] + enemigos_espera.copy()
+        orden_original_restantes = []
+        nombres_originales = [e.nombre for e in entidades[1:]]
+        mapa_actuales = {}
+        for e in enemigos:
+            if e:
+                mapa_actuales[e.nombre] = e
+        for e in enemigos_espera:
+            if e:
+                mapa_actuales[e.nombre] = e
+        for orig in entidades[1:]:
+            if orig.nombre not in mapa_actuales:
+                mapa_actuales[orig.nombre] = orig
 
-        time.sleep(1)
+        orden_original_restantes = [mapa_actuales[nm] for nm in nombres_originales if nm in mapa_actuales]
+
+        lista_a_guardar = [jugador] + orden_original_restantes
+
+        guardar_csv('SaveFileDnDRunning.csv', lista_a_guardar)
+
+        time.sleep(0.5)
 
     limpiar_pantalla()
+    # guardamos el estado final
+    nombres_originales = [e.nombre for e in entidades[1:]]
+    mapa_actuales = {}
+    for e in enemigos:
+        if e:
+            mapa_actuales[e.nombre] = e
+    for e in enemigos_espera:
+        if e:
+            mapa_actuales[e.nombre] = e
+    for orig in entidades[1:]:
+        if orig.nombre not in mapa_actuales:
+            mapa_actuales[orig.nombre] = orig
+    lista_final = [jugador] + [mapa_actuales[nm] for nm in nombres_originales if nm in mapa_actuales]
+    guardar_csv('SaveFileDnDRunning.csv', lista_final)
+
     print("¡Ganaste!" if jugador.sigue_vivo() else "Has muerto...")
 
 if __name__ == "__main__":
